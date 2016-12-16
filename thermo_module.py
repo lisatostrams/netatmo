@@ -8,10 +8,10 @@ Created on Fri Sep 16 12:52:02 2016
 import datetime
 import numpy as np   
 import matplotlib.pyplot as plt
+import matplotlib as mpl
+import matplotlib.dates as mdates
 from numpy import linspace, meshgrid
 from matplotlib.mlab import griddata
-<<<<<<< HEAD
-=======
 import pandas as pd
 import scipy as sp
 import geopy.distance as gp
@@ -21,7 +21,6 @@ import random
 
 
 
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
 
 def get_timestamps_temps(data_i):
     datesdata = data_i['thermo_module']['valid_datetime']
@@ -32,17 +31,21 @@ def get_timestamps_temps(data_i):
         thermo_mod.append(((datetime.datetime.fromtimestamp(date['$date']/1000)-datetime.timedelta(minutes=120)).strftime('%Y-%m-%d %H:%M:%S'), tempdata[i]))
         i+=1
     thermo_mod = sorted(thermo_mod, key=lambda date: date[0])  
-    return ([t[0] for t in thermo_mod], [t[1] for t in thermo_mod])
+    index = pd.DatetimeIndex([t[0] for t in thermo_mod])
+    series = [t[1] for t in thermo_mod]
+    time_series = pd.Series(series, index=index)
+    return time_series
 
 def create_thermo_module_dataset():
     from data import data    
     Thermo_Module = []
     for i in range(0,len(data)):
-        Thermo_Module.append(({'name': data[i]['_id'],'longitude': data[i]['longitude'], 'latitude':data[i]['latitude']}, 
-        get_timestamps_temps(data[i])))
+        Thermo_Module.append(({'name': data[i]['_id'],'longitude': data[i]['longitude'],
+                               'latitude':data[i]['latitude'], 'measurements': get_timestamps_temps(data[i]) }))
+    #data = pd.DataFrame(Thermo_Module)
     return Thermo_Module
     
-def plot_thermo_mods(ther_data, plot_hours, m):
+def plot_thermo_mods(ther_data, plot_hours, m, name):
     import matplotlib.dates as mdates
     days = mdates.DayLocator()
     daysFMT = mdates.DateFormatter('%d') 
@@ -51,13 +54,6 @@ def plot_thermo_mods(ther_data, plot_hours, m):
     hoursFMT = mdates.DateFormatter('%H')
     fig,ax= plt.subplots() 
     for i in range(0, len(ther_data)):
-<<<<<<< HEAD
-        curr = ther_data[i][1]
-        time = make_time_plottable(curr)
-        if len(curr[1]) == len(time): 
-            ax.plot_date(time, curr[1], '-.')
-    ax.plot_date(m[0],m[1], '-',color = 'k', linewidth = 3.0)
-=======
         curr = ther_data[i]
         #time = make_time_plottable(curr)
         #if len(curr[1]) == len(time): 
@@ -71,7 +67,6 @@ def plot_thermo_mods(ther_data, plot_hours, m):
   #  plt.legend()
     plt.legend(loc=3, borderaxespad=0.)
     ax.set_ylim(-10,40)
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
     if plot_hours:
         ax.xaxis.set_major_locator(hours)
         ax.xaxis.set_major_formatter(hoursFMT)
@@ -81,30 +76,6 @@ def plot_thermo_mods(ther_data, plot_hours, m):
         datemin = datetime.date(2016, 4, 1)
         datemax = datetime.date(2016, 5, 1)
         ax.set_xlim(datemin, datemax)
-<<<<<<< HEAD
-    plt.grid() 
-    plt.show()
-
-def chop_into_days(thermo_dataset):
-    days = []
-    for d in range(1,31):
-        stations_today = []
-        for i in range(0,len(thermo_dataset)):
-            current_station = thermo_dataset[i]
-            name_location = current_station[0]
-            temps_times = current_station[1]        
-            today_ti = []
-            today_tm = []
-            for i in range(0, len(temps_times[0])): 
-                if datetime.datetime.strptime(temps_times[0][i],'%Y-%m-%d %H:%M:%S').day == d and datetime.datetime.strptime(temps_times[0][i], '%Y-%m-%d %H:%M:%S').year == 2016:
-                    today_ti.append(temps_times[0][i])
-                    today_tm.append(temps_times[1][i])
-            stations_today.append((name_location, (today_ti, today_tm)))
-        days.append(stations_today)
-        print(d)
-    return days
-            
-=======
         for label in ax.xaxis.get_ticklabels()[::2]:
             label.set_visible(False)
    # plt.grid() 
@@ -112,66 +83,33 @@ def chop_into_days(thermo_dataset):
     plt.savefig('figures/All temp/{} with knmi.png'.format(name), dpi=600)
     plt.show()
           
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
 def resample(thermo_dataset):
-    new_thermo_dataset = []
-    import pandas as pd    
+    new_thermo_dataset = []  
+    nanpct = [] 
     for i in range(0,len(thermo_dataset)):
         print(i)
         current_station = thermo_dataset[i]
-        temp_df = current_station[1]
-        if(len(temp_df[1]) > 0):
-            series = temp_df[1]
+        temp_series = current_station['measurements']
+        
+        if(len(temp_series.tolist()) > 0):
+            series = temp_series.tolist()
             not_nan_pct = np.sum(~np.isnan(np.asarray(series)))/len(series)
+            nanpct.append(not_nan_pct)
             print(not_nan_pct)
-            if not_nan_pct > 0:
-                index = [datetime.datetime.strptime(t,'%Y-%m-%d %H:%M:%S') for t in temp_df[0]]
-                temp_series = pd.Series(series,index=index)
+            if not_nan_pct > 0.25:
+                
                 res_temp= temp_series.resample('10T').mean().bfill()
                 dates = pd.date_range('2016-03-31 23:30:00', '2016-05-01 05:00:00', freq = '10Min')
                 d = pd.DatetimeIndex(dates)
                 res_re_temp = res_temp.reindex(d, method='nearest')
-<<<<<<< HEAD
-                t = res_re_temp.tolist()
-                time = [dt_i.strftime('%Y-%m-%d %H:%M:%S') for dt_i in res_re_temp.index]
-    #            df = pd.DataFrame(t, index = res_temp.index)
-    #            dates = pd.date_range('2016-03-31 23:30:00', '2016-05-01 05:00:00', freq = '10Min')
-    #            df.reindex(dates)
-    #            temp = df.values.T.tolist()
-                new_temp_df = (time,t)
-                new_station = (current_station[0], new_temp_df)            
-=======
                 new_station = copy.copy(current_station)
                 new_station['measurements'] = res_re_temp
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
                 new_thermo_dataset.append(new_station)
             
     return new_thermo_dataset, nanpct
     
 def plot_points_slice(day, time):
-    import matplotlib.pyplot as plt
     fig = plt.figure()
-<<<<<<< HEAD
-    temp_slice = []
-    for i in range(0, len(day)):
-        station = day[i]
-        times = station[1][0]
-        if time in times:        
-            i = times.index(time)
-            temperatures = station[1][1]
-            temperature = temperatures[i]
-            temp_slice.append(temperature)
-        else:
-            temp_slice.append(float('NaN'))
-    plt.scatter([s[0]['longitude'] for s in day], 
-             [s[0]['latitude'] for s in day], 
-            c = temp_slice, 
-            s=50,
-            cmap = 'rainbow')   
-    plt.colorbar()
-    plt.show() 
-    return ([s[0]['longitude'] for s in day], [s[0]['latitude'] for s in day], temp_slice)
-=======
     date = datetime.datetime.strptime(time, '%Y-%m-%d %H:%M:%S')
     temp_slice = [d['measurements'][time] for d in day]
     for i in range(0, len(day)):
@@ -192,7 +130,6 @@ def plot_points_slice(day, time):
     plt.savefig('figures/Spatial analysis/locations_slice_filtered_data_{}_{}.png'.format(date_time.day, date_time.hour), dpi=600)
     plt.close()
     return ([s['longitude'] for s in day], [s['latitude'] for s in day], temp_slice), temp_slice
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
 
 def plot_points_average(data, name):
     fig = plt.figure()
@@ -215,71 +152,20 @@ def plot_points_average(data, name):
      
 
 def get_mean_faster(thermo_data):
-<<<<<<< HEAD
-    import pandas as pd
-    dates = pd.date_range('2016-03-31 23:30:00', '2016-05-01 05:00:00', freq = '10Min')
-    temp_data = [d[1][1] for d in thermo_data]
-=======
     dates = thermo_data[0]['measurements'].index
     temp_data = [d['measurements'].tolist() for d in thermo_data]
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
     array_data = np.asarray(temp_data)
     temp_means = np.nanmean(array_data, axis=0)
     times_list = dates
     temp_std = np.nanstd(array_data, axis=0)
     print(len(temp_means))
     return (times_list, temp_means, temp_std)
-<<<<<<< HEAD
-    
-def get_mean(thermo_data):
-    import pandas as pd   
-    import numpy as np
-    dates = pd.date_range('2016-03-31 23:30:00', '2016-05-01 05:00:00', freq = '10Min')
-    temp_means = []
-    times_list = []
-    temp_std = []
-    for timestamp in dates:
-        temp_slice = []
-        time = timestamp.strftime('%Y-%m-%d %H:%M:%S')
-        times_list.append(time)
-        count = 0
-       # print(timestamp)
-        for i in range(0,len(thermo_data)):
-            station = thermo_data[i][1]
-            times = station[0]
-            temps = station[1]
-            if time in times:
-                count = count+1
-                i = times.index(time)
-                temp_slice.append(temps[i])
-        if len(temp_slice) > 0:
-            temp_means.append(np.nanmean(temp_slice))
-            temp_std.append(np.nanstd(temp_slice))
-        else:
-            temp_means.append(np.nan)
-            temp_std.append(np.nan)
-    print(len(times_list))
-    print(len(temp_means))
-    return (times_list, temp_means, temp_std)                
-=======
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
             
 def remove_outliers(thermo_data, m):
     t = m[0]
     means = m[1]
     stds = m[2] 
     new_data = []
-<<<<<<< HEAD
-    import numpy as np
-    for i in range(0, len(thermo_data)):
-        station = thermo_data[i][1]
-        times = station[0]
-        temps = station[1]
-        new_temps = []
-        for j in range(0, len(t)):        
-            if t[j] in times:
-                c = times.index(t[j])
-=======
     var_knmi = np.nanstd(knmi[1])    
     correlations = []
     z_scores = []
@@ -314,95 +200,15 @@ def remove_outliers(thermo_data, m):
                 #c = times.index(t[j])
                 Z = (temps[c]-means[j])/stds[j]
                 z.append(Z)
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
                 if temps[c] > means[j]+(3*stds[j]) or temps[c] < means[j]-(3*stds[j]):
                     new_temps.append(np.nan)
+                elif j > 3:
+                    if temps[c] is temps[c-1] and temps[c] is temps[c-2]:
+                        new_temps.append(np.nan)
+                    else:
+                        new_temps.append(temps[c])
                 else:
                     new_temps.append(temps[c])
-<<<<<<< HEAD
-            else:
-                new_temps.append(np.nan)
-        new_station = (thermo_data[i][0], (times, new_temps))
-        new_data.append(new_station)
-    return new_data
-    
-def plot_thermo_mods_box(ther_data, plot_hours):
-    import matplotlib.dates as mdates
-    days = mdates.DayLocator()
-    hours = mdates.HourLocator()
-    daysFMT = mdates.DateFormatter('%d') 
-    hoursFMT = mdates.DateFormatter('%H')
-    fig,ax= plt.subplots() 
-    ax.boxplot([curr[1][1] for curr in ther_data])
-    m = get_mean(ther_data)
-    ax.plot(m[0],m[1], '-',color = 'k', linewidth = 3.0)
-    if plot_hours:
-        ax.xaxis.set_major_locator(hours)
-        ax.xaxis.set_major_formatter(hoursFMT)
-    else:
-        ax.xaxis.set_major_locator(days)
-        ax.xaxis.set_major_formatter(daysFMT)
-        datemin = datetime.date(2016, 4, 1)
-        datemax = datetime.date(2016, 5, 1)
-        ax.set_xlim(datemin, datemax)
-    plt.grid() 
-    plt.show()
-
-#from pylab import *
-def pca(data):
-    import matplotlib as mpl
-    import scipy.linalg as la
-    temp_data = [d[1][1] for d in data]
-    X = np.mat(np.asarray(temp_data))
-    N = len(X)
-    m = get_mean_faster(data)
-    Y = X - np.ones((N,1))*np.mat(m[1])
-    where_nans = np.isnan(Y)
-    
-
-    
-    C = np.cov(Y)
-    C = np.nan_to_num(C)
-    S,V = la.eig(C)
-    rho = abs((S*S)/(S*S).sum())
-    import matplotlib.pyplot as plt
-    sum_rho = np.cumsum(rho)
-    plt.plot(rho)
-    plt.plot(sum_rho)
-    plt.close()
-    V = V.T
-    Y[where_nans] = 1
-    #nrs = 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twentyone twentytwo twentythree twentyfour twentyfive'
-    #num = nrs.split()
-    num = [1,2,5,10,25,35,50,70,80,90,100]
-    times = []
-    for t in m[0]:
-        times.append(datetime.datetime.strptime(t,'%Y-%m-%d %H:%M:%S'))
-    times =  mpl.dates.date2num(times)   
-    import matplotlib.dates as mdates
-    days = mdates.DayLocator()
-    daysFMT = mdates.DateFormatter('%d') 
-
-    for i in num:
-        Z = V[:,0:i].T * Y
-        W = np.ones((N,1))* np.mat(m[1]) + (np.mat(Z).T * np.mat(V[:,0:i]).T).T
-        fig,ax= plt.subplots() 
-        ax.plot(times,W.T, '-.')
-        ax.xaxis.set_major_locator(days)
-        ax.xaxis.set_major_formatter(daysFMT)
-        datemin = datetime.date(2016, 4, 1)
-        datemax = datetime.date(2016, 5, 1)
-        ax.set_xlim(datemin, datemax)
-        plt.ylabel('Temperature')
-        plt.xlabel('Day in month')
-        plt.grid()
-        plt.title('Data (z<3) reconstructed from first {} PC ({:.4f}% var explained)'.format(i,100*abs(sum_rho[i-1])))
-        plt.savefig('figures/PCA/PCA_first_{}_pc_outlier_removed_resampled_data.pdf'.format(i))  
-        plt.close()
-    return rho, W
-    
-def kalman(station, model, m):
-=======
             new_station = copy.copy(station)
             new_station['measurements'] = pd.Series(new_temps, index=temp_series.index)
             if sum(new_station['measurements'].isnull())/len(new_station['measurements']) < 0.5:
@@ -502,63 +308,32 @@ def pca(data, name):
                 explained_var[c][j-1] = daymean.corr(data[c]['measurements'][td])**2
   
     return new_data, explained_var
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
     
-#    x = []
-#    A = 1
-#    H = 1
-#    Q = 0.1
-#    K = 0
-#    P = np.cov(model)
-#    B = 0
-#    u = 0
-#    R = np.cov(station[1][1])
-#    
-    n_iter = len(station[1][1])
+def kalman(station, model, m, i):
+    #    
+    n_iter = len(station['measurements'].tolist())
     sz = (n_iter,) # size of array
-<<<<<<< HEAD
-    x = model[0] # truth value (typo in example at top of p. 13 calls this z)
-    z = station[1][1] # observations (normal about x, sigma=0.1)
-
-    Q =  0.1#np.sqrt(np.var(model)) # process variance
-    print(Q)
-    # allocate space for arrays
-=======
     x = model[0] # truth value (typo??? in example intro kalman paper at top of p. 13 calls this z)
     z = station['measurements'].tolist() # observations 
 
     Q =  0.29 # process variance
 
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
     xhat=np.zeros(sz)      # a posteri estimate of x
     P=np.zeros(sz)         # a posteri error estimate
     xhatminus=np.zeros(sz) # a priori estimate of x
     Pminus=np.zeros(sz)    # a priori error estimate
     K=np.zeros(sz)         # gain or blending factor
     
-<<<<<<< HEAD
-    R =  np.var(model) # estimate of measurement variance, change to see effect
-    print(R)
-=======
     #R =  np.var(model) # estimate of measurement variance
     R = np.asarray(z)-np.asarray(knmi[1]) #changing variation 
    
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
     # intial guesses
-    xhat[0] = 0.0
+    xhat[0] = x
     P[0] = 1.0
 
     for k in range(1,n_iter):
         # time update
         xhatminus[k] = xhat[k-1]
-<<<<<<< HEAD
-        Pminus[k] = P[k-1]+Q
-    
-        # measurement update
-        K[k] = Pminus[k]/( Pminus[k]+R )
-        xhat[k] = xhatminus[k]+K[k]*(z[k]-xhatminus[k])
-        P[k] = (1-K[k])*Pminus[k]
-=======
         #xhatminus[k] = xhat[k-1] + delta_m
         Pminus[k] = P[k-1]+Q  #static Q
     
@@ -579,48 +354,10 @@ def pca(data, name):
             xhat[k] = xhatminus[k]+K[k]*(z[k]-xhatminus[k])
 
             P[k] = (1-K[k])*Pminus[k]
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
 
-    import matplotlib as mpl
-    import matplotlib.dates as mdates
+   
     days = mdates.DayLocator()
     daysFMT = mdates.DateFormatter('%d') 
-<<<<<<< HEAD
-    times = []
-    for t in m[0]:
-        times.append(datetime.datetime.strptime(t,'%Y-%m-%d %H:%M:%S'))
-    times =  mpl.dates.date2num(times)   
-    fig,ax= plt.subplots()
-    ax.plot(times,z,'k+',label='noisy measurements')
-    ax.plot(times,xhat,'b-',label='a posteri estimate')
-    ax.plot(times,model,color='g',label='model')
-    ax.xaxis.set_major_locator(days)
-    ax.xaxis.set_major_formatter(daysFMT)
-    datemin = datetime.date(2016, 4, 1)
-    datemax = datetime.date(2016, 5, 1)
-    ax.set_xlim(datemin, datemax)
-    plt.legend()
-    plt.title('Estimate vs. iteration step', fontweight='bold')
-    plt.xlabel('Day')
-    plt.ylabel('Temperature')
-    plt.savefig('figures/Kalman/kalman_model_mean_Q_{}_R_{}.pdf'.format(Q,R))
-
-    return xhat
-    
-    
-thermo_mod_dataset = create_thermo_module_dataset()
-#plot_thermo_mods(thermo_mod_dataset, False)
-resampled = resample(thermo_mod_dataset)
-m = get_mean_faster(resampled)
-#resampled_outlier = remove_outliers(resampled, m)
-#m = []
-#plot_thermo_mods(resampled_outlier, False, m)
-#rho,W = pca(resampled_outlier)
-station = resampled[1]
-#plot_thermo_mods([station], False, m)
-x = kalman(station, m[1],m)
-
-=======
     
     if PLOT:
         fig,ax= plt.subplots()
@@ -1127,4 +864,3 @@ knmi, knmi_timeseries = create_knmi()
 #X = np.asarray(points_locations)
 #Ydist = sp.spatial.distance.pdist(X, lambda u,v: gp.distance(u,v).kilometers)
 ###max_dist = max(Ydist)
->>>>>>> 0d8817c... removed some data, added kriging, added quality measures
