@@ -24,4 +24,4 @@ def read_obs_file(file_path):
     return df
 
 
-df = read_obs_file('Data/new_data (2).txt')
+df = read_obs_file('Data/new_data.txt')

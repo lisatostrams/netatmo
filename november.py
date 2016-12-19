@@ -148,7 +148,7 @@ def plot_points_average(data, name):
             c = temp_mean, 
             s=30,
             lw =0.1,
-            cmap = 'rainbow') 
+            cmap = 'rainbow', vmin=4.8, vmax=9.3) 
     plt.colorbar(label='temperature in degrees Celsius')
     plt.title('station locations and average measurements')
     plt.ylabel('latitude')
@@ -452,10 +452,10 @@ def plot_data(thermo_data, name):
 def fourier_transform(new_data):
     import scipy.signal
     for d in new_data:
-        f, pxx = scipy.signal.welch(d['measurements']['2016-04'].tolist(), fs=144, nperseg=2048)
+        f, pxx = scipy.signal.welch(d['measurements']['2016-11'].tolist(), fs=144, nperseg=2048)
         plt.plot(f, pxx)
         
-    f, pxx = scipy.signal.welch(knmi_timeseries['2016-04'].tolist(), fs=144, nperseg=2048)
+    f, pxx = scipy.signal.welch(knmi_timeseries['2016-11'].tolist(), fs=144, nperseg=2048)
     plt.plot(f, pxx, 'red', lw=2, label='KNMI data')
     plt.xlim(0,3.5)
     plt.xlabel('Frequency (per day)')   
@@ -928,15 +928,13 @@ knmi, knmi_timeseries = create_knmi()
 
 
 #make googlemap plot
-#import gmplot
-#lats = [s['latitude'] for s in raw]
-#longs = [s['longitude'] for s in raw]
-#gmap = gmplot.GoogleMapPlotter(np.mean(lats), np.mean(longs), 12)
-#gmap.scatter(lats, longs, color='b',size=200, marker=False)
-#
-##for i  in range(len(lats)):
-##    gmap.scatter([lats[i], [longs[i], longs[i]+0.1], 'o')
-#gmap.draw("mymap.html")
+import gmplot
+lats = [s['latitude'] for s in raw]
+longs = [s['longitude'] for s in raw]
+gmap = gmplot.GoogleMapPlotter(np.mean(lats), np.mean(longs), 12)
+gmap.scatter(lats, longs, color='b',size=200, marker=False)
+
+gmap.draw("mymap2.html")
 
 
 
