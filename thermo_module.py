@@ -141,7 +141,7 @@ def plot_points_average(data, name):
             c = temp_mean, 
             s=30,
             lw =0.1,
-            cmap = 'rainbow') 
+            cmap = 'rainbow', vmin=9.2, vmax = 10.7) 
     plt.colorbar(label='temperature in degrees Celsius')
     plt.title('station locations and average measurements')
     plt.ylabel('latitude')
@@ -769,7 +769,7 @@ def run_analysis():
     pc, exp_var = pca(filtered, 'bla')
     var = np.nanmean(exp_var, axis=1)
     idx = var < 0.8
-    idx2 = np.array(mse) > 2.5
+    idx2 = np.array(mse) > 1.5
     data = [pc[i] for i in range(len(idx)) if idx[i]==False and idx2[i]==False]
     mse_time, mse_station, conf, Z = spatial(pc)
     
@@ -880,13 +880,13 @@ def run_analysis():
     corr_krig = plot_data(new_data, 'Kriging processed data')
     mse_per_station = np.nanmean(mse_station, axis=0) 
     
-    idx = np.array(mse_per_station) >4.85
+    idx = np.array(mse_per_station) >5.99132
     krigeworst = [data[i] for i in range(len(idx)) if idx[i]==True]
-    plot_thermo_mods(krigeworst, False, get_mean_faster(filtered), 'Worst 10 Kriging mse stations mse 4.85 cutoff')
+    plot_thermo_mods(krigeworst, False, get_mean_faster(filtered), 'Worst 10 Kriging mse stations mse 6 cutoff')
     
-    idx = np.array(mse_per_station) < 0.54
+    idx = np.array(mse_per_station) < 0.6
     krigebest = [data[i] for i in range(len(idx)) if idx[i]==True]
-    plot_thermo_mods(krigebest, False, get_mean_faster(filtered), 'Best 10 Kriging mse stations mse 0.54 cutoff')
+    plot_thermo_mods(krigebest, False, get_mean_faster(filtered), 'Best 10 Kriging mse stations mse 0.6 cutoff')
     
        
     idx = np.array(c) > 6
@@ -904,21 +904,21 @@ knmi, knmi_timeseries = create_knmi()
 
 
 #make googlemap plot
-import gmplot
-lats = [s['latitude'] for s in max_distances]
-longs = [s['longitude'] for s in max_distances]
-gmap = gmplot.GoogleMapPlotter(np.mean(lats), np.mean(longs), 12)
-gmap.scatter(lats, longs, color='b',size=200, marker=False)
-
-gmap.draw("mymap.html")
-
+#import gmplot
+#lats = [s['latitude'] for s in max_distances]
+#longs = [s['longitude'] for s in max_distances]
+#gmap = gmplot.GoogleMapPlotter(np.mean(lats), np.mean(longs), 12)
+#gmap.scatter(lats, longs, color='b',size=200, marker=False)
+#
+#gmap.draw("maxdist.html")
+#
 
 
 ##Spatial stuff
 
 #corr_new = plot_data(new_resampled_outlier, 'new data')
 #data = [new_resampled_outlier[i] for i in range(len(corr_new)) if corr_new[i] > 0.8]
-points_locations = [[s['longitude'], s['latitude']] for s in raw]
+points_locations = [[s['longitude'], s['latitude']] for s in outlier]
 X = np.asarray(points_locations)
 Ydist = sp.spatial.distance.pdist(X, lambda u,v: gp.distance(u,v).kilometers)
 ###max_dist = max(Ydist)
