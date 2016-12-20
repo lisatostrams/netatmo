@@ -141,7 +141,7 @@ def plot_points_average(data, name):
             c = temp_mean, 
             s=30,
             lw =0.1,
-            cmap = 'rainbow') 
+            cmap = 'rainbow', vmin=9.2, vmax = 10.7) 
     plt.colorbar(label='temperature in degrees Celsius')
     plt.title('station locations and average measurements')
     plt.ylabel('latitude')
@@ -316,7 +316,7 @@ def kalman(station, model, m, i):
     x = model[0] # truth value (typo??? in example intro kalman paper at top of p. 13 calls this z)
     z = station['measurements'].tolist() # observations 
 
-    Q =  0.29 # process variance
+    Q =  0.1 # process variance
 
     xhat=np.zeros(sz)      # a posteri estimate of x
     P=np.zeros(sz)         # a posteri error estimate
@@ -438,24 +438,18 @@ def plot_data(thermo_data, name):
     return corr_data
       
     
-def fourier_transform(thermo_data):
-    import scipy.fftpack
-    data = [d[1][1] for d in thermo_data]
-    array_data = np.asarray(data)
-    N = len(array_data.T)
-    print(N)
-    Y = array_data # - np.ones((N,1))*np.mat(np.nanmean(array_data,1))
-
-    T = 1 / 144
-    plt.plot(Y.T)
-    y = Y
-    yf = scipy.fftpack.fft(y)
-    xf = np.linspace(0.0, 1.0/T, N)
-    fig, ax = plt.subplots()
-    yf = yf.T
-    ax.plot(xf,  np.abs(yf[:N]))
-    ax.set_xlim(0,10)
-    plt.savefig('fourier.pdf', dpi=600)
+def fourier_transform(new_data):
+    import scipy.signal
+    for d in new_data:
+        f, pxx = scipy.signal.welch(d['measurements']['2016-04'].tolist(), fs=144, nperseg=2048)
+        plt.plot(f, pxx)
+        
+    f, pxx = scipy.signal.welch(knmi_timeseries['2016-04'].tolist(), fs=144, nperseg=2048)
+    plt.plot(f, pxx, 'red', lw=2, label='KNMI data')
+    plt.xlim(0,3.5)
+    plt.xlabel('Frequency (per day)')   
+    plt.ylabel('Power spectrum density')
+    plt.savefig('figures/All temp/fouriertransform.png', dpi=600)
     plt.show()
     
 def semivariance_as_function_of_distance(data, resolution, time, Ydist, max_dist):
@@ -484,11 +478,11 @@ def corr_as_function_of_distance(data, name, resolution, time, Ydist, max_dist):
        # print(np.round(i,1))
         M.append(np.nanmean([correlation_with_stations[j] for j in range(len(Ydist)) if np.round(Ydist[j],r) == np.round(i,r)]))
         
-#    plt.plot(M)
-#    plt.title('correlation between stations as a function of distance, res = {} km'.format(1/resolution))
-#    plt.xlabel('Distance in {} km'.format(1/resolution))
-#    plt.ylabel('average correlation coeff on {}'.format(time))
-#    plt.savefig('figures/Spatial analysis/corr as a function of distance res = {} km on {}.png'.format(1/resolution,time),dpi=600)
+    plt.plot(M)
+    plt.title('correlation between stations as a function of distance, res = {} km'.format(1/resolution))
+    plt.xlabel('Distance in {} km'.format(1/resolution))
+    plt.ylabel('average correlation coeff on {}'.format(time))
+    plt.savefig('figures/Spatial analysis/corr as a function of distance res = {} km on {} {}.png'.format(1/resolution,time, name),dpi=600)
     return M
         
 def gamma_spherical(c_null, c, r, h):
@@ -674,7 +668,7 @@ def krige( P, hs, bw, u, N, covfct, mu):
     error = abs(np.nanmean(weights*(estimation-P[:,2])**2))
     return float( estimation ), error
     
-def kriging_fun(sliced, hs, bw, covfct, name, save, mu):
+def kriging_fun(sliced, hs, bw, covfct, name, mu):
     '''
     sliced      = locations and values at timestep
     hs          = lags
@@ -685,15 +679,13 @@ def kriging_fun(sliced, hs, bw, covfct, name, save, mu):
     mu          = mean 
     '''
     P = np.array(sliced)
-    idx = np.isnan(P[:,2])
-    Pnan = P[idx]
-    Pc = P[~idx]
+ 
     
-    if save:
+    if PLOT:
         sv = SV( P, hs, bw )  
         fig, ax = plt.subplots()
         ax.plot( sv[0], sv[1], '.' )
-        #ax.plot( sv[0], covfct(sv[0][0])+abs(covfct(sv[0][0])-covfct(sv[0])), 'r' ) 
+        ax.plot( sv[0], covfct(sv[0][0])+abs(covfct(sv[0][0])-covfct(sv[0])), 'r' ) 
         plt.title('Semivariogram')
         plt.ylabel('Semivariance')
         plt.xlabel('Lag [m]')
@@ -702,20 +694,22 @@ def kriging_fun(sliced, hs, bw, covfct, name, save, mu):
     Z = []
     err = []
    
-    for i in range(len(Pnan)):
-        p = Pnan[i,:]
-        estimate, error = krige(np.delete(P, (i), axis=0), hs, bw, (p[0], p[1]), 10, covfct, mu)
-        Z.append((p[0], p[1], estimate, error, 0))
-        
+
     for i in range(len(P)):
         p = P[i,:]
-        estimate, error = krige(np.delete(P, (i), axis=0), hs, bw, (p[0], p[1]), 10, covfct, mu)
-        Z.append((p[0], p[1], estimate, error, abs(estimate-p[2])/np.sqrt(error)))
+        Pn = np.delete(P, (i), axis=0)
+        idx = np.isnan(Pn[:,2])
+        Pn = Pn[~idx]
+        estimate, error = krige(Pn, hs, bw, (p[0], p[1]), 10, covfct, mu)
+        if np.isnan(p[2]):
+            Z.append((p[0], p[1], estimate, error, np.nan))
+        else:
+            Z.append((p[0], p[1], estimate, error, abs(estimate-p[2])/np.sqrt(error)))
         err.append((estimate-p[2])**2)
 
     mse = np.nanmean(err)
     Z = pd.DataFrame(Z, columns = ['x', 'y', 'est', 'error', 'conf' ] )
-    if save:
+    if PLOT:
         fig, ax = plt.subplots()
         plt.scatter(Z.x, Z.y, c=Z.conf, s=25,lw=0.1, cmap='Blues')
         plt.xlabel('longitude')
@@ -735,12 +729,12 @@ def spatial(data):
     mse_station = []
     conf = []
     ##### binwidth, plus or minus 500 meters
-    bw = 1000
+    bw = 500
     ###### lags in 1000 meter increments from zero to 43,000
     hs = np.arange(0,43000,bw)
     
     ##### to improve runtime.. trying to calc average covfct
-    average = plot_points_average(data, 'Average measurements')
+    average = plot_points_average(new_data, 'Average measurements')
     covfct = cvmodel( np.array(average).T, gaussian, hs, bw )  
     
   
@@ -752,16 +746,14 @@ def spatial(data):
         dstr = datetime.datetime.strftime(date, '%Y-%m-%d %H:%M:%S')
         print(dstr)
         sliced = [(d['longitude'], d['latitude'], d['measurements'][dstr]) for d in data]
-        save = False
+
         mu = mean[dstr]
-        if (date.hour == 12 or date.hour == 6 or date.hour ==18 or date.hour == 0) and date.minute == 0:
-            save = True
-        Z, mse, err = kriging_fun(sliced, hs, bw, covfct, 'day {} hour {}_00'.format(date.day, date.hour), save, mu)
+        Z, mse, err = kriging_fun(sliced, hs, bw, covfct, 'day {} hour {}_00'.format(date.day, date.hour), mu)
         mse_time.append(mse)
         mse_station.append(err)
         conf.append(Z.conf)
         for i in range(len(data)):
-            if Z.conf[i] > 8:
+            if Z.conf[i] > 6 or np.isnan(Z.conf[i]):
                 new_data[i]['measurements'][dstr] = Z.est[i]
         print("--- %s seconds ---" % (time.time() - start_time))
 #    for s in range(len(new_data)):
@@ -775,6 +767,10 @@ def run_analysis():
     outlier, corr, z_scores = remove_outliers(raw, get_mean_faster(raw))
     filtered, mse =   kalman_f(outlier)
     pc, exp_var = pca(filtered, 'bla')
+    var = np.nanmean(exp_var, axis=1)
+    idx = var < 0.8
+    idx2 = np.array(mse) > 1.5
+    data = [pc[i] for i in range(len(idx)) if idx[i]==False and idx2[i]==False]
     mse_time, mse_station, conf, Z = spatial(pc)
     
     plt.figure()         
@@ -812,55 +808,117 @@ def run_analysis():
     plt.ylabel('Number of stations')
     plt.savefig('figures/Quality measures/pca.png', dpi=600)      
     
+    plt.figure()         
+    plt.hist(np.nanmean(mse_station, axis=0), 50, facecolor='green')
+    plt.title('Histogram MSE Kriging in stations')
+    plt.xlabel('Mean square error')
+    plt.ylabel('Number of stations')
+    plt.savefig('figures/Quality measures/kriging_mse.png', dpi=600)   
+    
+    c = np.nanmean(conf, axis=0)
+    plt.figure()         
+    plt.hist(c, 50, facecolor='green')
+    plt.title('Histogram confidence score Kriging in stations')
+    plt.xlabel('Confidence score')
+    plt.ylabel('Number of stations')
+    plt.savefig('figures/Quality measures/kriging_conf.png', dpi=600)   
+         
+       
+    days = mdates.HourLocator()
+    daysFMT = mdates.DateFormatter('%H') 
+    fig,ax= plt.subplots() 
+    ax.plot(knmi_timeseries[td].index, np.nanmean(summed, axis=0), 'g')
+    plt.xlabel('Hour of day')
+    plt.ylabel('Mean squared error')
+    ax.xaxis.set_major_locator(days)
+    ax.xaxis.set_major_formatter(daysFMT)
+    for label in ax.xaxis.get_ticklabels()[::2]:
+        label.set_visible(False)
+    plt.title('MSE Kriging during the day')
+    plt.savefig('figures/Quality measures/kriging_day.png', dpi=600)   
+    
+    
+    
     plot_thermo_mods(raw, False, get_mean_faster(raw), 'Raw data')
     cor_raw = plot_data(raw, 'Raw data')
 
     plot_thermo_mods(outlier, False, get_mean_faster(outlier), 'Preprocessed data')
     cor_outl = plot_data(outlier, 'Preprocessed data')
-    idx = np.array(corr) > 0.93
+    idx = np.array(corr) > 0.9241
     corrbest =  [raw[i] for i in range(len(idx)) if idx[i]==True]
-    plot_thermo_mods(corrbest, False, get_mean_faster(raw), 'Best {} corr stations r 0.93 cutoff'.format(len(corrbest)))
+    plot_thermo_mods(corrbest, False, get_mean_faster(raw), 'Best {} corr stations r 0.9241 cutoff'.format(len(corrbest)))
 
-    idx = np.array(corr) < 0.3
+    idx = np.array(corr) < 0.29
     corrworst =  [raw[i] for i in range(len(idx)) if idx[i]==True]
-    plot_thermo_mods(corrworst, False, get_mean_faster(raw), 'Worst {} corr stations r 0.3 cutoff'.format(len(corrworst)))
+    plot_thermo_mods(corrworst, False, get_mean_faster(raw), 'Worst {} corr stations r 0.29 cutoff'.format(len(corrworst)))
 
+    
     plot_thermo_mods(filtered, False, get_mean_faster(filtered), 'Kalman filtered data')
     cor_kal = plot_data(filtered, 'Kalman filtered data')
-    idx = np.array(mse) < 0.2
+    idx = np.array(mse) < 0.15
     kalmanbest_12 = [outlier[i] for i in range(len(idx)) if idx[i]==True]
-    plot_thermo_mods(kalmanbest_12, False, get_mean_faster(outlier), 'Best 12 mse stations mse 0.15 cutoff')
+    plot_thermo_mods(kalmanbest_12, False, get_mean_faster(outlier), 'Best 10 mse stations mse 0.15 cutoff')
     
-    idx = np.array(mse) > 2.5
+    idx = np.array(mse) > 2.7
     kalman_12 = [outlier[i] for i in range(len(idx)) if idx[i]==True]
-    plot_thermo_mods(kalman_12, False, get_mean_faster(outlier), 'Worst 12 mse stations mse 2.5 cutoff')
+    plot_thermo_mods(kalman_12, False, get_mean_faster(outlier), 'Worst 10 mse stations mse 2.7 cutoff')
     
 
     plot_thermo_mods(filtered, False, get_mean_faster(pc), 'PCA processed data')
     cor_pc = plot_data(pc, 'PCA processed data')
+  
     
-     
+    idx = var < 0.72
+    pcworst = [filtered[i] for i in range(len(idx)) if idx[i]==True]
+    plot_thermo_mods(pcworst, False, get_mean_faster(filtered), 'Worst 10 PC var explained stations perc 0.72 cutoff')
+    
+    idx = var > 0.97
+    pcbest = [filtered[i] for i in range(len(idx)) if idx[i]==True]
+    plot_thermo_mods(pcbest, False, get_mean_faster(filtered), 'Best 10 PC var explained stations perc 0.97 cutoff')
+    
+    plot_thermo_mods(new_data, False, get_mean_faster(new_data), 'Measurements after Kriging correction')
+    corr_krig = plot_data(new_data, 'Kriging processed data')
+    mse_per_station = np.nanmean(mse_station, axis=0) 
+    
+    idx = np.array(mse_per_station) >5.99132
+    krigeworst = [data[i] for i in range(len(idx)) if idx[i]==True]
+    plot_thermo_mods(krigeworst, False, get_mean_faster(filtered), 'Worst 10 Kriging mse stations mse 6 cutoff')
+    
+    idx = np.array(mse_per_station) < 0.6
+    krigebest = [data[i] for i in range(len(idx)) if idx[i]==True]
+    plot_thermo_mods(krigebest, False, get_mean_faster(filtered), 'Best 10 Kriging mse stations mse 0.6 cutoff')
+    
+       
+    idx = np.array(c) > 6
+    krigeworstc = [data[i] for i in range(len(idx)) if idx[i]==True]
+    plot_thermo_mods(krigeworstc, False, get_mean_faster(filtered), 'Worst 10 Kriging conf stations conf 6 cutoff')
+    
+    idx = np.array(c) < 1.42
+    krigebestc = [data[i] for i in range(len(idx)) if idx[i]==True]
+    plot_thermo_mods(krigebestc, False, get_mean_faster(filtered), 'Best 10 Kriging conf stations conf  cutoff')
+    
 PLOT = False
 knmi, knmi_timeseries = create_knmi()    
     
+
+
+
 #make googlemap plot
 #import gmplot
-#lats = [s['latitude'] for s in raw]
-#longs = [s['longitude'] for s in raw]
+#lats = [s['latitude'] for s in max_distances]
+#longs = [s['longitude'] for s in max_distances]
 #gmap = gmplot.GoogleMapPlotter(np.mean(lats), np.mean(longs), 12)
 #gmap.scatter(lats, longs, color='b',size=200, marker=False)
 #
-##for i  in range(len(lats)):
-##    gmap.scatter([lats[i], [longs[i], longs[i]+0.1], 'o')
-#gmap.draw("mymap.html")
-
+#gmap.draw("maxdist.html")
+#
 
 
 ##Spatial stuff
 
 #corr_new = plot_data(new_resampled_outlier, 'new data')
 #data = [new_resampled_outlier[i] for i in range(len(corr_new)) if corr_new[i] > 0.8]
-#points_locations = [[s['longitude'], s['latitude']] for s in data]
-#X = np.asarray(points_locations)
-#Ydist = sp.spatial.distance.pdist(X, lambda u,v: gp.distance(u,v).kilometers)
+points_locations = [[s['longitude'], s['latitude']] for s in outlier]
+X = np.asarray(points_locations)
+Ydist = sp.spatial.distance.pdist(X, lambda u,v: gp.distance(u,v).kilometers)
 ###max_dist = max(Ydist)
