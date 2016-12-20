@@ -478,11 +478,11 @@ def corr_as_function_of_distance(data, name, resolution, time, Ydist, max_dist):
        # print(np.round(i,1))
         M.append(np.nanmean([correlation_with_stations[j] for j in range(len(Ydist)) if np.round(Ydist[j],r) == np.round(i,r)]))
         
-#    plt.plot(M)
-#    plt.title('correlation between stations as a function of distance, res = {} km'.format(1/resolution))
-#    plt.xlabel('Distance in {} km'.format(1/resolution))
-#    plt.ylabel('average correlation coeff on {}'.format(time))
-#    plt.savefig('figures/Spatial analysis/corr as a function of distance res = {} km on {}.png'.format(1/resolution,time),dpi=600)
+    plt.plot(M)
+    plt.title('correlation between stations as a function of distance, res = {} km'.format(1/resolution))
+    plt.xlabel('Distance in {} km'.format(1/resolution))
+    plt.ylabel('average correlation coeff on {}'.format(time))
+    plt.savefig('figures/Spatial analysis/corr as a function of distance res = {} km on {} {}.png'.format(1/resolution,time, name),dpi=600)
     return M
         
 def gamma_spherical(c_null, c, r, h):
@@ -904,15 +904,13 @@ knmi, knmi_timeseries = create_knmi()
 
 
 #make googlemap plot
-#import gmplot
-#lats = [s['latitude'] for s in raw]
-#longs = [s['longitude'] for s in raw]
-#gmap = gmplot.GoogleMapPlotter(np.mean(lats), np.mean(longs), 12)
-#gmap.scatter(lats, longs, color='b',size=200, marker=False)
-#
-##for i  in range(len(lats)):
-##    gmap.scatter([lats[i], [longs[i], longs[i]+0.1], 'o')
-#gmap.draw("mymap.html")
+import gmplot
+lats = [s['latitude'] for s in max_distances]
+longs = [s['longitude'] for s in max_distances]
+gmap = gmplot.GoogleMapPlotter(np.mean(lats), np.mean(longs), 12)
+gmap.scatter(lats, longs, color='b',size=200, marker=False)
+
+gmap.draw("mymap.html")
 
 
 
@@ -920,7 +918,7 @@ knmi, knmi_timeseries = create_knmi()
 
 #corr_new = plot_data(new_resampled_outlier, 'new data')
 #data = [new_resampled_outlier[i] for i in range(len(corr_new)) if corr_new[i] > 0.8]
-#points_locations = [[s['longitude'], s['latitude']] for s in data]
-#X = np.asarray(points_locations)
-#Ydist = sp.spatial.distance.pdist(X, lambda u,v: gp.distance(u,v).kilometers)
+points_locations = [[s['longitude'], s['latitude']] for s in raw]
+X = np.asarray(points_locations)
+Ydist = sp.spatial.distance.pdist(X, lambda u,v: gp.distance(u,v).kilometers)
 ###max_dist = max(Ydist)
