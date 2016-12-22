@@ -83,6 +83,40 @@ def plot_thermo_mods(ther_data, plot_hours, m, name):
     plt.savefig('figures/All temp/{} with knmi.png'.format(name), dpi=600)
     plt.show()
           
+def plot_station(station, plot_hours, m, name):
+    import matplotlib.dates as mdates
+    days = mdates.DayLocator()
+    daysFMT = mdates.DateFormatter('%d') 
+    hours = mdates.HourLocator()
+    daysFMT = mdates.DateFormatter('%d') 
+    hoursFMT = mdates.DateFormatter('%H')
+    fig,ax= plt.subplots() 
+    ax.plot(station['measurements'], '-',lw = 1.5, c='darkcyan')
+  #  ax.plot_date(m[0],m[1], '-',color = 'black', linewidth = 2, label='CWS mean')
+    ax.plot(knmi[0],knmi[1], '-', color ='red', linewidth = 2, label='KNMI measurements')
+    plt.xlabel('Day in month')
+    plt.ylabel('Temperature in degrees celsius')
+    fig.set_size_inches(6,4)
+ #   ax.set_ylim(0,40)
+  #  plt.legend()
+    plt.legend(loc=3, borderaxespad=0.)
+    ax.set_ylim(-10,40)
+    if plot_hours:
+        ax.xaxis.set_major_locator(hours)
+        ax.xaxis.set_major_formatter(hoursFMT)
+    else:
+        ax.xaxis.set_major_locator(days)
+        ax.xaxis.set_major_formatter(daysFMT)
+        datemin = datetime.date(2016, 4, 2)
+        datemax = datetime.date(2016, 4, 15)
+        ax.set_xlim(datemin, datemax)
+        for label in ax.xaxis.get_ticklabels()[::2]:
+            label.set_visible(False)
+   # plt.grid() 
+    plt.title('{}'.format(name))
+    plt.savefig('figures/All temp/station {} with knmi.png'.format(name), dpi=600)
+    plt.show()
+    
 def resample(thermo_dataset):
     new_thermo_dataset = []  
     nanpct = [] 
@@ -238,7 +272,7 @@ def pca(data, name):
         S,V = la.eig(C)             # calc eigenvalues S and eigenvectors V.T
           
         V = V.T
-        rho = abs((S*S)/(S*S).sum())
+        rho = abs((S)/(S).sum())
         sum_rho = np.cumsum(rho)    # explained var
         
         if PLOT:
@@ -315,7 +349,7 @@ def kalman(station, model, m, i):
     sz = (n_iter,) # size of array
     x = model[0] # truth value (typo??? in example intro kalman paper at top of p. 13 calls this z)
     z = station['measurements'].tolist() # observations 
-
+    N = knmi_timeseries.diff()
     Q =  0.1 # process variance
 
     xhat=np.zeros(sz)      # a posteri estimate of x
@@ -325,12 +359,12 @@ def kalman(station, model, m, i):
     K=np.zeros(sz)         # gain or blending factor
     
     #R =  np.var(model) # estimate of measurement variance
-    R = np.asarray(z)-np.asarray(knmi[1]) #changing variation 
-   
+    #R = abs(station['measurements'].diff()) #changing variation 
+    R = abs(np.asarray(z)-np.asarray(knmi[1]))
     # intial guesses
     xhat[0] = x
     P[0] = 1.0
-
+    SE = []
     for k in range(1,n_iter):
         # time update
         xhatminus[k] = xhat[k-1]
@@ -341,24 +375,26 @@ def kalman(station, model, m, i):
       #  K[k] = Pminus[k]/( Pminus[k]+R ) #static R
         
         if np.isnan(z[k]):
-            xhat[k] = np.nan
+            xhat[k] = xhatminus[k]+N[k]
             P[k] = np.nan
         else:
-            if np.isnan(R[k]) or R[k] < 1:
-                R[k] = np.nanmean(R)
+            if np.isnan(R[k]) or R[k]+Pminus[k] < 0.3:
+                R[k] = 1
             if np.isnan(xhatminus[k]):
-                xhatminus[k] = m[1][k]
+                xhatminus[k] = z[k]
             if np.isnan(Pminus[k]):
                 Pminus[k] = np.nanmean(P)
             K[k] = Pminus[k]/(Pminus[k]+R[k]) #dynamic R
             xhat[k] = xhatminus[k]+K[k]*(z[k]-xhatminus[k])
 
             P[k] = (1-K[k])*Pminus[k]
+        SE.append((xhatminus[k]-z[k])**2)
 
    
     days = mdates.DayLocator()
     daysFMT = mdates.DateFormatter('%d') 
-    
+    idx = np.isnan(np.array(P))
+    xhat[idx] = np.nan
     if PLOT:
         fig,ax= plt.subplots()
         ax.plot(station['measurements'].index,z,'k+',label='measurements')
@@ -376,7 +412,7 @@ def kalman(station, model, m, i):
         plt.ylabel('Temperature')
         plt.savefig('figures/Kalman/kalman_model_mean_knmiplot_station_{}_R_{}.png'.format(Q,i,np.mean(R)), dpi=600)
         plt.close()
-    return xhat,P
+    return xhat,P, SE
     
 def kalman_f(data):
     new_resampled_outlier = []
@@ -384,13 +420,13 @@ def kalman_f(data):
     m = get_mean_faster(data)
     mse = []
     for station in data:
-        x,P = kalman(station, knmi[1],m, i)
+        x,P, SE = kalman(station, knmi[1],m, i)
         new_station = copy.copy(station)
         new_station['measurements'] = pd.Series(x, index=station['measurements'].index)
-        diff = (new_station['measurements'].subtract(station['measurements']))**2
+       # diff = (new_station['measurements'].subtract(station['measurements']))**2
         new_resampled_outlier.append(new_station)
         i = i+1
-        mse.append(diff.mean())
+        mse.append(np.nanmean(SE))
     
     return new_resampled_outlier,mse
     
@@ -421,7 +457,7 @@ def plot_data(thermo_data, name):
         c = station['measurements'].corr(knmi_timeseries)
         corr_data.append(c)
     corr_data = np.nan_to_num(corr_data)
-    ax.plot(knmi_timeseries['2016-04'].tolist(), array_data.T, '.', ms=1.3, color='seagreen')
+    ax.plot(knmi_timeseries['2016-04'].tolist(), array_data.T, '.', ms=3, color='seagreen')
     min_ax = max(ax.get_xlim()[1], ax.get_ylim()[1])-3
     fig.set_size_inches(5,5)
     ax.plot([0, min_ax], [0, min_ax], ls="--", color='k', lw = 2.0, label='perfect correlation' )
@@ -498,32 +534,33 @@ def gamma_gaussian(c_null, c, a, h):
     return c_null + c*(1-np.exp(-(h**2/a**2))) 
  
     
-def fit_gamma(Mn, Ydist, res, model='spherical'):
+def fit_gamma(Mn, Ydist, res, model='Spherical'):
     hvals = linspace(0, max_dist, np.ceil(max_dist)*res)
-    if model == 'exponential' or model == 'gaussian':
-         c_null = (1-np.nanmean(M)) * np.nanvar(np.asarray([d['measurements'] for d in data]))
+    if model == 'Exponential' or model == 'Gaussian':
+         c_null = 2#np.nanvar(np.asarray([d['measurements'] for d in data]))
     else :
-         c_null = (1-np.nanmean(M)**2) * np.nanstd(np.asarray([d['measurements'] for d in data]))
+         c_null =  (1.2-np.nanmean(M)) *np.nanstd(np.asarray([d['measurements'] for d in data]))
     c = np.nanmean(Mn)        
     r = max_dist
     gamma_h = []
     i = 0
     for h in hvals:
-        if model == 'exponential':
-            
+        if model == 'Exponential':
             gamma_h.append(gamma_exponential(c_null, c, r, h))
-        elif model == 'gaussian':
+        elif model == 'Gaussian':
             gamma_h.append(gamma_gaussian(c_null, c, r, h))
         else:
             gamma_h.append(gamma_spherical(c_null, c, r, h))
-            model = 'spherical'
+            model = 'Spherical'
         i = i+1
-    
-    plt.plot(gamma_h, 'r',lw=2, label = '{} model'.format(model))
-    plt.plot(Mn, '.',label= 'sample semivariance')
-    plt.xlabel('Lag in 0.1 km')
+    fig, ax = plt.subplots()
+    ax.plot(gamma_h, 'r',lw=2, label = '{} model'.format(model))
+    ax.plot(Mn, '.',label= 'Experimental variogram')
+    ax.set_xticks((50, 100, 150, 200, 250, 300, 350, 400, 450))
+    ax.set_xticklabels(('5','10', '15', '20', '25', '30', '35', '40','45'))
+    plt.xlabel('Lag [km]')
     plt.ylabel('Semivariance')
-    plt.title('Experimental variograms with fitted model')
+    plt.title('Experimental variogram and fitted model')
     plt.legend(loc=0)
     plt.savefig('figures/Spatial analysis/variogram with {} model fitted, res = {}.png'.format(model, 1/res), dpi=600)
     plt.show()
@@ -768,10 +805,17 @@ def run_analysis():
     filtered, mse =   kalman_f(outlier)
     pc, exp_var = pca(filtered, 'bla')
     var = np.nanmean(exp_var, axis=1)
-    idx = var < 0.8
-    idx2 = np.array(mse) > 1.5
+    idx = var < 0.76
+    idx2 = np.array(mse) > 1
     data = [pc[i] for i in range(len(idx)) if idx[i]==False and idx2[i]==False]
-    mse_time, mse_station, conf, Z = spatial(pc)
+    mse_time, mse_station, conf, Z = spatial(data)
+    
+    plt.figure()         
+    plt.hist(Ydist, 430, lw=0.1, facecolor='green')
+    plt.title('Number of pairs of stations at a certain lag')
+    plt.xlabel('Lag [km]')
+    plt.ylabel('Number of pairs of stations')
+    plt.savefig('figures/Quality measures/hist.png', dpi=600)
     
     plt.figure()         
     plt.hist(nonnan, 50, facecolor='green')
@@ -797,7 +841,7 @@ def run_analysis():
     plt.figure()         
     plt.hist(mse, 50, facecolor='green')
     plt.title('Histogram of MSE Kalman filter in stations')
-    plt.xlabel('Mean square error')
+    plt.xlabel('Mean squared error')
     plt.ylabel('Number of stations')
     plt.savefig('figures/Quality measures/mse_kalman.png', dpi=600)      
     
@@ -855,26 +899,29 @@ def run_analysis():
     
     plot_thermo_mods(filtered, False, get_mean_faster(filtered), 'Kalman filtered data')
     cor_kal = plot_data(filtered, 'Kalman filtered data')
-    idx = np.array(mse) < 0.15
+    idx = np.array(mse) < 0.07
     kalmanbest_12 = [outlier[i] for i in range(len(idx)) if idx[i]==True]
-    plot_thermo_mods(kalmanbest_12, False, get_mean_faster(outlier), 'Best 10 mse stations mse 0.15 cutoff')
+    plot_thermo_mods(kalmanbest_12, False, get_mean_faster(outlier), 'Best 10 stations MSE=0.07 cutoff')
     
-    idx = np.array(mse) > 2.7
+    idx = np.array(mse) > 1
     kalman_12 = [outlier[i] for i in range(len(idx)) if idx[i]==True]
-    plot_thermo_mods(kalman_12, False, get_mean_faster(outlier), 'Worst 10 mse stations mse 2.7 cutoff')
+    plot_thermo_mods(kalman_12, False, get_mean_faster(outlier), 'Worst 10 stations MSE=1 cutoff')
     
 
     plot_thermo_mods(filtered, False, get_mean_faster(pc), 'PCA processed data')
     cor_pc = plot_data(pc, 'PCA processed data')
   
     
-    idx = var < 0.72
+    idx = var < 0.7
     pcworst = [filtered[i] for i in range(len(idx)) if idx[i]==True]
-    plot_thermo_mods(pcworst, False, get_mean_faster(filtered), 'Worst 10 PC var explained stations perc 0.72 cutoff')
+    plot_thermo_mods(pcworst, False, get_mean_faster(filtered), 'Worst 10 stations per=0.72 cutoff')
     
-    idx = var > 0.97
+    idx = var > 0.96
     pcbest = [filtered[i] for i in range(len(idx)) if idx[i]==True]
-    plot_thermo_mods(pcbest, False, get_mean_faster(filtered), 'Best 10 PC var explained stations perc 0.97 cutoff')
+    plot_thermo_mods(pcbest, False, get_mean_faster(filtered), 'Best 10 stations per= 0.97 cutoff')
+    
+    plot_thermo_mods(data, False, get_mean_faster(data), 'Temporal processed data')
+    corr_data = plot_data(data, 'Temporal processed data')
     
     plot_thermo_mods(new_data, False, get_mean_faster(new_data), 'Measurements after Kriging correction')
     corr_krig = plot_data(new_data, 'Kriging processed data')
@@ -902,6 +949,33 @@ knmi, knmi_timeseries = create_knmi()
     
 
 
+mean_data = get_mean_faster(data)
+mean_dataseries = pd.Series(mean_data[1], index=data[0]['measurements'].index)
+diff_knmi_post = mean_dataseries.subtract(knmi_timeseries)
+summed = []
+
+for j in range(1,31): 
+    date = datetime.datetime(2016,11,j)
+    td = datetime.datetime.strftime(date, '%Y%m%d')
+    summed.append(diff_knmi_post[td])
+mean_diff = np.nanmean(summed, axis=0)
+
+
+days = mdates.HourLocator()
+daysFMT = mdates.DateFormatter('%H') 
+fig,ax= plt.subplots() 
+ax.plot(data[0]['measurements'][td].index, mean_diff)
+ax.set_ylim(-0.2,3)
+plt.xlabel('Hour of day')
+plt.ylabel('Difference in degrees Celsius')
+ax.xaxis.set_major_locator(days)
+ax.xaxis.set_major_formatter(daysFMT)
+for label in ax.xaxis.get_ticklabels()[::2]:
+    label.set_visible(False)
+plt.title('Average difference during the day')
+plt.savefig('figures/averagedifferenceknmiprocessed.png', dpi=600)   
+
+
 
 #make googlemap plot
 #import gmplot
@@ -918,7 +992,7 @@ knmi, knmi_timeseries = create_knmi()
 
 #corr_new = plot_data(new_resampled_outlier, 'new data')
 #data = [new_resampled_outlier[i] for i in range(len(corr_new)) if corr_new[i] > 0.8]
-points_locations = [[s['longitude'], s['latitude']] for s in outlier]
+points_locations = [[s['longitude'], s['latitude']] for s in data]
 X = np.asarray(points_locations)
 Ydist = sp.spatial.distance.pdist(X, lambda u,v: gp.distance(u,v).kilometers)
 ###max_dist = max(Ydist)
