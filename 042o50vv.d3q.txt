@@ -1,0 +1,23 @@
+﻿
+# Please enter the commit message for your changes. Lines starting
+# with '#' will be ignored, and an empty message aborts the commit.
+# On branch FinalAnalysis
+# Your branch is ahead of 'origin/FinalAnalysis' by 3 commits.
+#   (use "git push" to publish your local commits)
+#
+# Changes to be committed:
+#	new file:   Kalman.png
+#	modified:   __pycache__/data.cpython-35.pyc
+#	modified:   __pycache__/read_knmi_obs.cpython-35.pyc
+#	deleted:    figures/All temp/Best 10 Kriging mse stations mse 0.6 cutoff with knmi.png
+#	new file:   figures/All temp/Kalman filtered data with knmi.png
+#	deleted:    figures/All temp/Worst 10 Kriging mse stations mse 6 cutoff with knmi.png
+#	deleted:    figures/Spatial analysis/corr as a function of distance res = 0.1 km on 2016-04 Preprocessed data.png
+#	deleted:    figures/Spatial analysis/corr as a function of distance res = 0.1 km on 2016-04 Temporal analysed data.png
+#	deleted:    figures/Spatial analysis/corr as a function of distance res = 0.1 km on 2016-04 Temporal and spatial analysed data.png
+#	deleted:    figures/Spatial analysis/corr as a function of distance res = 0.1 km on 2016-04 Unprocessed data.png
+#	deleted:    figures/Spatial analysis/locations_average_Krige best.png
+#	deleted:    figures/Spatial analysis/locations_average_Krige worst.png
+#	modified:   map.png
+#
+
