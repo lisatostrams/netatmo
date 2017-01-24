@@ -322,7 +322,7 @@ def kalman(station, model, m, i):
     sz = (n_iter,) # size of array
     x = model[0] # truth value (typo??? in example intro kalman paper at top of p. 13 calls this z)
     z = station['measurements'].tolist() # observations 
-
+    N = knmi_timeseries.diff()
     Q =  0.1 # process variance
 
     xhat=np.zeros(sz)      # a posteri estimate of x
@@ -332,7 +332,7 @@ def kalman(station, model, m, i):
     K=np.zeros(sz)         # gain or blending factor
     
     #R =  np.var(model) # estimate of measurement variance
-    R = np.asarray(z)-np.asarray(knmi[1]) #changing variation 
+    R = abs(np.asarray(z)-np.asarray(knmi[1])) #changing variation 
    
     # intial guesses
     xhat[0] = x
@@ -348,7 +348,7 @@ def kalman(station, model, m, i):
       #  K[k] = Pminus[k]/( Pminus[k]+R ) #static R
         
         if np.isnan(z[k]):
-            xhat[k] = np.nan
+            xhat[k] = xhatminus[k]+N[k]
             P[k] = np.nan
         else:
             if np.isnan(R[k]) or R[k] < 1:
@@ -369,7 +369,8 @@ def kalman(station, model, m, i):
    
     days = mdates.DayLocator()
     daysFMT = mdates.DateFormatter('%d') 
-    
+    idx = np.isnan(np.array(P))
+    xhat[idx] = np.nan 
     if PLOT:
         fig,ax= plt.subplots()
         ax.plot(station['measurements'].index,z,'k+',label='measurements')
@@ -782,7 +783,7 @@ def run_analysis():
     filtered, mse =   kalman_f(outlier)
     pc, exp_var = pca(filtered, 'bla')
     var = np.nanmean(exp_var, axis=1)
-    idx = var < 0.84
+    idx = var < 0.85
     idx2 = np.array(mse) > 1.5
     data = [pc[i] for i in range(len(idx)) if idx[i]==False and idx2[i]==False]
     mse_time, mse_station, conf, Z = spatial(data)
@@ -925,17 +926,42 @@ PLOT = False
 knmi, knmi_timeseries = create_knmi()    
     
 
+mean_data = get_mean_faster(data)
+mean_dataseries = pd.Series(mean_data[1], index=data[0]['measurements'].index)
+diff_knmi_post = mean_dataseries.subtract(knmi_timeseries)
+summed = []
+
+for j in range(1,31): 
+    date = datetime.datetime(2016,11,j)
+    td = datetime.datetime.strftime(date, '%Y%m%d')
+    summed.append(diff_knmi_post[td])
+mean_diff = np.nanmean(summed, axis=0)
+
+
+days = mdates.HourLocator()
+daysFMT = mdates.DateFormatter('%H') 
+fig,ax= plt.subplots() 
+ax.plot(data[0]['measurements'][td].index, mean_diff)
+ax.set_ylim(-0.2,3)
+plt.xlabel('Hour of day')
+plt.ylabel('Difference in degrees Celsius')
+ax.xaxis.set_major_locator(days)
+ax.xaxis.set_major_formatter(daysFMT)
+for label in ax.xaxis.get_ticklabels()[::2]:
+    label.set_visible(False)
+plt.title('Average difference during the day')
+plt.savefig('figures/averagedifferenceknmiprocessed.png', dpi=600)   
 
 
 #make googlemap plot
-import gmplot
-lats = [s['latitude'] for s in raw]
-longs = [s['longitude'] for s in raw]
-gmap = gmplot.GoogleMapPlotter(np.mean(lats), np.mean(longs), 12)
-gmap.scatter(lats, longs, color='b',size=200, marker=False)
-
-gmap.draw("mymap2.html")
-
+#import gmplot
+#lats = [s['latitude'] for s in raw]
+#longs = [s['longitude'] for s in raw]
+#gmap = gmplot.GoogleMapPlotter(np.mean(lats), np.mean(longs), 12)
+#gmap.scatter(lats, longs, color='b',size=200, marker=False)
+#
+#gmap.draw("mymap2.html")
+#
 
 
 ##Spatial stuff
